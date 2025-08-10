@@ -1,0 +1,215 @@
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# Backup files created by scripts
+*.backup.*
+compose/docker-compose.yml.backup.*
+scripts/*.backup.*
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Docker
+.docker/
+docker-compose.override.yml
+
+# SSL certificates and keys (these should be managed by certbot on server)
+*.pem
+*.key
+*.crt
+*.csr
+ssl/
+certificates/
+
+# System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.nvimrc
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Local development
+local/
+dev/
+.local
+
+# Node modules (if you add any Node.js tools)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python (if you add any Python tools)
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# macOS
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# NGINX generated files (these should be on server only)
+nginx/sites-enabled/*
+nginx/logs/
+
+# Monitoring and stats
+stats/
+metrics/
+monitoring/
+
+# Database files (if you add any local databases)
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/
+cache/
+
+# Coverage reports (if you add testing)
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Secrets and sensitive data
+secrets/
+private/
+*.secret
+config.json
+settings.json
+
+# OS generated files
+.directory
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Atom
+.atom/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# Local environment overrides
+local.yml
+local.yaml
+docker-compose.local.yml
+docker-compose.dev.yml
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Lock files
+package-lock.json
+yarn.lock
+Pipfile.lock
+
+# Terraform (if you add infrastructure as code)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes (if you add k8s configs)
+*.kubeconfig
+kubeconfig
+
+# Personal notes and TODO files
+TODO
+TODO.md
+NOTES
+NOTES.md
+notes/
+
+# Deployment artifacts
+deployment/
+artifacts/
