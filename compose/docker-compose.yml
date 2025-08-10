@@ -1,0 +1,29 @@
+version: '3.9'
+services:
+  port-app:
+    build: ../apps/port-app
+    container_name: port_app
+    restart: always
+    ports:
+      - "8010:8000"
+    env_file:
+      - ../apps/port-app/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  chat-app:
+    build: ../apps/chat-app
+    container_name: chat_app
+    restart: always
+    ports:
+      - "8011:8000"
+    env_file:
+      - ../apps/chat-app/.env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
