@@ -28,8 +28,8 @@ ssh root@your_droplet_ip
 apt update && apt upgrade -y
 
 # Create non-root user (optional but recommended)
-adduser yourusername
-usermod -aG sudo yourusername
+adduser yonggangx
+usermod -aG sudo yonggangx
 ```
 
 ### 3. Install Required Software
@@ -40,7 +40,7 @@ sh get-docker.sh
 usermod -aG docker $USER
 
 # Install Docker Compose
-curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+curl -L "https://github.com/docker/compose/releases/download/v2.39.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 chmod +x /usr/local/bin/docker-compose
 
 # Install NGINX
