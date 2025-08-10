@@ -14,20 +14,6 @@ services:
       timeout: 10s
       retries: 3
 
-  168port:
-    build: ../apps/168port
-    container_name: 168port
-    restart: always
-    ports:
-      - "8010:8000"
-    env_file:
-      - ../apps/168port/.env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   168board:
     build: ../apps/168board
     container_name: 168board
@@ -37,7 +23,7 @@ services:
     env_file:
       - ../apps/168board/.env
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
+      test: ["CMD", "curl", "-f", "http://localhost:8011/health"]
       interval: 30s
       timeout: 5s
       retries: 3
