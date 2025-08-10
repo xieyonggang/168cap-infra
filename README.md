@@ -248,14 +248,213 @@ API_KEY=your_api_key
 
 ## GitHub Actions CI/CD Setup
 
-### 1. Configure GitHub Secrets
-In your GitHub repository, add these secrets:
-- `DROPLET_HOST`: Your droplet IP address
-- `DROPLET_USER`: SSH username (e.g., `root`)
-- `DROPLET_SSH_KEY`: Your private SSH key content
+### 1. Generate SSH Key Pair (if you don't have one)
 
-### 2. GitHub Actions Workflow
-The included workflow automatically deploys on push to main branch.
+If you don't already have SSH keys set up for your droplet:
+
+```bash
+# On your local machine, generate a new SSH key pair
+ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/168cap_deploy
+
+# This creates two files:
+# ~/.ssh/168cap_deploy (private key - for GitHub Secrets)
+# ~/.ssh/168cap_deploy.pub (public key - for droplet)
+```
+
+### 2. Add Public Key to Your Droplet
+
+```bash
+# Copy the public key to your droplet
+ssh-copy-id -i ~/.ssh/168cap_deploy.pub root@your_droplet_ip
+
+# Or manually add it:
+# 1. Copy the public key content
+cat ~/.ssh/168cap_deploy.pub
+
+# 2. SSH into your droplet and add to authorized_keys
+ssh root@your_droplet_ip
+mkdir -p ~/.ssh
+echo "your_public_key_content_here" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
+```
+
+### 3. Configure GitHub Repository Secrets
+
+In your GitHub repository, go to **Settings** → **Secrets and variables** → **Actions**, then add these secrets:
+
+#### Required Secrets:
+
+**`DROPLET_HOST`**
+- **Value**: Your droplet's IP address or domain
+- **Example**: `159.203.123.45` or `168cap.com`
+
+**`DROPLET_USER`** 
+- **Value**: SSH username for your droplet
+- **Example**: `root` or `yonggangx` (your created user)
+
+**`DROPLET_SSH_KEY`**
+- **Value**: Your private SSH key content (entire file)
+- **How to get it**:
+```bash
+# Copy your private key content
+cat ~/.ssh/168cap_deploy
+
+# Copy the ENTIRE output including:
+# -----BEGIN OPENSSH PRIVATE KEY-----
+# ... key content ...
+# -----END OPENSSH PRIVATE KEY-----
+```
+
+### 4. Step-by-Step Secret Configuration
+
+1. **Navigate to Repository Settings**:
+   - Go to your `168cap-infra` repository on GitHub
+   - Click **Settings** tab
+   - Click **Secrets and variables** in left sidebar
+   - Click **Actions**
+
+2. **Add DROPLET_HOST**:
+   - Click **New repository secret**
+   - Name: `DROPLET_HOST`
+   - Secret: `your_droplet_ip` (e.g., `159.203.123.45`)
+   - Click **Add secret**
+
+3. **Add DROPLET_USER**:
+   - Click **New repository secret**
+   - Name: `DROPLET_USER`
+   - Secret: `root` (or your SSH username)
+   - Click **Add secret**
+
+4. **Add DROPLET_SSH_KEY**:
+   - Click **New repository secret**
+   - Name: `DROPLET_SSH_KEY`
+   - Secret: Paste your entire private key content from `cat ~/.ssh/168cap_deploy`
+   - **Important**: Include the header and footer lines
+   - Click **Add secret**
+
+### 5. Test SSH Connection
+
+Before relying on GitHub Actions, test the SSH connection:
+
+```bash
+# Test SSH connection with your key
+ssh -i ~/.ssh/168cap_deploy root@your_droplet_ip
+
+# If successful, you should be able to log in without password
+# Test the deployment path exists
+ls ~/168cap-infra/scripts/deploy.sh
+```
+
+### 6. GitHub Actions Workflow
+
+The included workflow (`.github/workflows/deploy.yml`) automatically:
+- Triggers on push to `main` branch
+- SSHs into your droplet using the configured secrets
+- Runs the deployment script
+
+**Current workflow**:
+```yaml
+name: Deploy to Droplet
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into Droplet and Deploy
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            cd ~/168cap-infra/scripts
+            ./deploy.sh
+```
+
+### 7. Verify GitHub Actions Setup
+
+1. **Check Secrets**: Go to repository Settings → Secrets and variables → Actions
+   - You should see 3 secrets: `DROPLET_HOST`, `DROPLET_USER`, `DROPLET_SSH_KEY`
+
+2. **Test Deployment**: Make a small change and push to main branch
+   ```bash
+   # Make a test change
+   echo "# Test" >> README.md
+   git add README.md
+   git commit -m "Test GitHub Actions deployment"
+   git push origin main
+   ```
+
+3. **Monitor Deployment**: 
+   - Go to **Actions** tab in your repository
+   - Watch the workflow execution
+   - Check for any errors in the logs
+
+### 8. Troubleshooting GitHub Actions
+
+**"Permission denied (publickey)" error**:
+```bash
+# Verify your private key is correct
+ssh -i ~/.ssh/168cap_deploy root@your_droplet_ip
+
+# Check if public key is in authorized_keys on droplet
+cat ~/.ssh/authorized_keys
+```
+
+**"Host key verification failed"**:
+- The SSH action might fail on first run due to host key verification
+- Add this to your workflow for first-time setup:
+```yaml
+- name: SSH into Droplet and Deploy
+  uses: appleboy/ssh-action@v1.0.0
+  with:
+    host: ${{ secrets.DROPLET_HOST }}
+    username: ${{ secrets.DROPLET_USER }}
+    key: ${{ secrets.DROPLET_SSH_KEY }}
+    script_stop: true
+    script: |
+      cd ~/168cap-infra/scripts
+      ./deploy.sh
+```
+
+**"deploy.sh not found"**:
+```bash
+# SSH into droplet and verify paths
+ssh root@your_droplet_ip
+ls ~/168cap-infra/scripts/deploy.sh
+chmod +x ~/168cap-infra/scripts/deploy.sh
+```
+
+### 9. Security Best Practices
+
+- **Use dedicated SSH keys** for GitHub Actions (not your personal keys)
+- **Limit key permissions** on the droplet to only what's needed
+- **Rotate keys regularly** (every 6-12 months)
+- **Monitor deployment logs** for any suspicious activity
+- **Use specific user** instead of root if possible
+
+### 10. Optional: Non-Root Deployment User
+
+For better security, create a dedicated deployment user:
+
+```bash
+# On your droplet, create deploy user
+sudo adduser deploy
+sudo usermod -aG docker deploy
+sudo usermod -aG sudo deploy
+
+# Set up SSH key for deploy user
+sudo su - deploy
+mkdir -p ~/.ssh
+# Add your public key to ~/.ssh/authorized_keys
+
+# Update GitHub secret DROPLET_USER to "deploy"
+```
 
 ## Deployment Commands
 
@@ -277,570 +476,52 @@ docker-compose up -d --build
 docker-compose logs -f chat-app
 ```
 
-## Step-by-Step Guide: Adding New Applications
 
-This section provides detailed actions for adding a new LLM app or website to your infrastructure. Follow these steps in order.
+## Adding New Apps - Ultra-Quick Deployment
 
-### Prerequisites Checklist
-Before starting, ensure:
-- [ ] Your app has a working `Dockerfile`
-- [ ] App exposes a health check endpoint (`/health` or `/docs`)
-- [ ] App runs on port 8000 internally
-- [ ] You have a subdomain ready (e.g., `newapp.168cap.com`)
-- [ ] DNS A record points to your droplet IP
-
----
-
-### Step 1: Prepare Your Application Repository
-
-#### 1.1 Create/Update Dockerfile
-Ensure your app has a `Dockerfile` in its root directory:
-
-```dockerfile
-FROM python:3.11-slim
-
-# Set working directory
-WORKDIR /app
-
-# Install system dependencies (if needed)
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Expose port 8000 (standard for all apps)
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-#### 1.2 Create Environment File Template
-Create `.env.example` in your app repository:
-```bash
-# App Configuration
-APP_NAME=Your New App
-DEBUG=false
-LOG_LEVEL=info
-
-# API Keys (replace with actual values)
-OPENAI_API_KEY=your_openai_key_here
-DATABASE_URL=postgresql://user:pass@localhost/dbname
-
-# Other app-specific variables
-MAX_TOKENS=4000
-RATE_LIMIT=100
-```
-
-#### 1.3 Add Health Check Endpoint
-Ensure your FastAPI app has a health endpoint:
-```python
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
-```
-
----
-
-### Step 2: Server-Side Setup
-
-#### 2.1 Clone Your App to Server
-```bash
-# SSH into your droplet
-ssh root@your_droplet_ip
-
-# Navigate to apps directory
-cd ~/apps
-
-# Clone your new app
-git clone https://github.com/yourusername/your-new-app.git
-
-# Verify the structure
-ls -la your-new-app/
-```
-
-#### 2.2 Create Environment File
-```bash
-# Copy environment template
-cd ~/apps/your-new-app
-cp .env.example .env
-
-# Edit with actual values
-nano .env
-```
-
-#### 2.3 Test App Locally (Optional)
-```bash
-# Test build locally first
-cd ~/apps/your-new-app
-docker build -t your-new-app-test .
-
-# Test run (use a temporary port)
-docker run -p 9000:8000 --env-file .env your-new-app-test
-
-# Test health endpoint
-curl http://localhost:9000/health
-
-# Stop test container
-docker stop $(docker ps -q --filter ancestor=your-new-app-test)
-```
-
----
-
-### Step 3: Update Infrastructure Configuration
-
-#### 3.1 Find Next Available Port
-```bash
-# Check currently used ports in docker-compose.yml
-cd ~/168cap-infra/compose
-grep -n "ports:" docker-compose.yml
-
-# Use next available port (e.g., if 8002 is last used, use 8003)
-```
-
-#### 3.2 Add Service to Docker Compose
-Edit `~/168cap-infra/compose/docker-compose.yml`:
+Deploy new apps with a single command:
 
 ```bash
-nano ~/168cap-infra/compose/docker-compose.yml
-```
-
-Add your new service (replace `your-new-app` and `8003` with your values):
-
-```yaml
-  your-new-app:
-    build: ../apps/your-new-app
-    container_name: your_new_app
-    restart: always
-    ports:
-      - "8003:8000"  # External:Internal port mapping
-    env_file:
-      - ../apps/your-new-app/.env
-    volumes:
-      # Add if you need persistent storage
-      - your_new_app_data:/app/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    depends_on:
-      # Add if your app depends on other services
-      - some-database
-```
-
-If you need volumes, add them at the bottom:
-```yaml
-volumes:
-  your_new_app_data:
-```
-
----
-
-### Step 4: Configure NGINX Reverse Proxy
-
-#### 4.1 Create NGINX Site Configuration
-```bash
-# Create new site configuration
-sudo nano /etc/nginx/sites-available/newapp.168cap.com
-```
-
-Add this configuration (replace `newapp.168cap.com` and port `8003`):
-
-```nginx
-server {
-    listen 80;
-    server_name newapp.168cap.com;
-    
-    # Security headers
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    
-    # Proxy settings
-    location / {
-        proxy_pass http://localhost:8003;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-    }
-    
-    # Health check endpoint (optional, for monitoring)
-    location /nginx-health {
-        access_log off;
-        return 200 "healthy\n";
-        add_header Content-Type text/plain;
-    }
-}
-```
-
-#### 4.2 Enable the Site
-```bash
-# Create symbolic link to enable site
-sudo ln -s /etc/nginx/sites-available/newapp.168cap.com /etc/nginx/sites-enabled/
-
-# Test NGINX configuration
-sudo nginx -t
-
-# If test passes, reload NGINX
-sudo systemctl reload nginx
-```
-
----
-
-### Step 5: DNS and SSL Configuration
-
-#### 5.1 Verify DNS (if not done already)
-```bash
-# Check if your subdomain resolves to droplet IP
-dig newapp.168cap.com
-
-# Should show your droplet IP in A record
-```
-
-#### 5.2 Obtain SSL Certificate
-```bash
-# Get SSL certificate for your new subdomain
-sudo certbot --nginx -d newapp.168cap.com
-
-# Verify certificate
-sudo certbot certificates
-```
-
----
-
-### Step 6: Deploy and Test
-
-#### 6.1 Deploy Your New App
-```bash
-# Navigate to compose directory
-cd ~/168cap-infra/compose
-
-# Build and start the new service
-docker-compose up -d --build your-new-app
-
-# Check if container is running
-docker-compose ps
-
-# Check logs for any errors
-docker-compose logs -f your-new-app
-```
-
-#### 6.2 Test Your Application
-
-**Test internal connectivity:**
-```bash
-# Test internal port
-curl http://localhost:8003/health
-
-# Test through NGINX (HTTP - before SSL)
-curl http://newapp.168cap.com/health
-```
-
-**Test external connectivity:**
-```bash
-# Test HTTPS (after SSL setup)
-curl https://newapp.168cap.com/health
-
-# Test from external machine
-curl -I https://newapp.168cap.com
-```
-
-#### 6.3 Monitor Resource Usage
-```bash
-# Check container resource usage
-docker stats
-
-# Check overall system resources
-free -h
-df -h
-```
-
----
-
-### Step 7: Update Deployment Scripts (Optional)
-
-#### 7.1 Update deploy.sh
-If your app needs to be included in automated deployments:
-
-```bash
-nano ~/168cap-infra/scripts/deploy.sh
-```
-
-Add your app to the deployment script:
-```bash
-echo "== Pulling latest app code =="
-cd ~/apps/port-app && git pull origin main
-cd ~/apps/chat-app && git pull origin main
-cd ~/apps/your-new-app && git pull origin main  # Add this line
-```
-
-#### 7.2 Test Deployment Script
-```bash
-# Test the updated deployment script
-cd ~/168cap-infra/scripts
-./deploy.sh
-```
-
----
-
-### Step 8: Update GitHub Actions (if needed)
-
-If you want your new app to be part of the automated CI/CD:
-
-#### 8.1 Update Workflow File
-The existing workflow should work automatically since it runs `deploy.sh`, but you can verify:
-
-```bash
-cat ~/168cap-infra/.github/workflows/deploy.yml
-```
-
-#### 8.2 Test CI/CD
-1. Push changes to your infrastructure repo
-2. Check GitHub Actions tab for deployment status
-3. Verify your app is deployed correctly
-
----
-
-### Step 9: Final Verification
-
-#### 9.1 Complete System Check
-```bash
-# Check all containers are running
-docker-compose ps
-
-# Check NGINX status
-sudo systemctl status nginx
-
-# Check SSL certificates
-sudo certbot certificates
-
-# Check disk space
-df -h
-```
-
-#### 9.2 Functionality Test
-1. Visit `https://newapp.168cap.com` in browser
-2. Test all major features of your app
-3. Check browser developer tools for any errors
-4. Test on mobile device (if applicable)
-
-#### 9.3 Monitor for 24 Hours
-After deployment, monitor:
-- Container logs: `docker-compose logs -f your-new-app`
-- NGINX logs: `sudo tail -f /var/log/nginx/access.log`
-- System resources: `htop` or `docker stats`
-
----
-
-### Troubleshooting New App Issues
-
-**Container won't start:**
-```bash
-# Check build logs
-docker-compose logs your-new-app
-
-# Rebuild from scratch
-docker-compose build --no-cache your-new-app
-docker-compose up -d your-new-app
-```
-
-**502 Bad Gateway:**
-```bash
-# Check if container is running on correct internal port
-docker-compose exec your-new-app curl localhost:8000/health
-
-# Check NGINX proxy_pass port matches docker-compose ports
-```
-
-**SSL Issues:**
-```bash
-# Check certificate status
-sudo certbot certificates
-
-# Renew if needed
-sudo certbot renew --dry-run
-```
-
-**Port Conflicts:**
-```bash
-# Check which ports are in use
-netstat -tulpn | grep :80
-docker-compose ps
-```
-
-This completes the process of adding a new application to your 168cap.com infrastructure.
-
-## Automated App Deployment
-
-To minimize manual work, we've created automation scripts that can deploy new apps with minimal input.
-
-### Option 1: Ultra-Quick Deployment (Recommended)
-
-For fastest deployment when your GitHub repo is ready:
-
-```bash
-# Deploy with one command (uses repo name as subdomain)
+# Deploy any GitHub repo as a new app (uses repo name as subdomain)
 ~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/my-chat-app
 
 # Or specify custom health check path
 ~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/my-chat-app /docs
 ```
 
-This script automatically:
-- ✅ Extracts app name from GitHub URL
-- ✅ Creates subdomain as `repo-name.168cap.com`
+**What it does automatically:**
+- ✅ Extracts app name from GitHub URL → Creates `my-chat-app.168cap.com`
 - ✅ Finds next available port
 - ✅ Clones/updates your app
-- ✅ Creates basic `.env` file
-- ✅ Updates Docker Compose
-- ✅ Creates NGINX config
+- ✅ Creates `.env` file from template
+- ✅ Updates Docker Compose config
+- ✅ Creates NGINX reverse proxy
 - ✅ Deploys container
 - ✅ Sets up SSL certificate
-- ✅ Tests deployment
+- ✅ Tests everything works
 
-**Time: ~2-3 minutes** ⚡
+**Time: ~2-3 minutes total** ⚡
 
-### Option 2: Interactive Deployment (More Control)
+### Requirements for Your App Repository
 
-For deployments where you want more control or customization:
-
-```bash
-~/168cap-infra/scripts/add-new-app.sh
-```
-
-This script provides:
-- Step-by-step guidance
-- Option to customize subdomain
-- Detailed error checking
-- More configuration options
-- Progress feedback
-
-**Time: ~5-7 minutes**
-
-### Option 3: Create New App from Template
-
-To create a new LLM app from scratch:
-
-```bash
-# Create FastAPI app template
-~/168cap-infra/scripts/create-app-template.sh
-
-# Then deploy it
-~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/your-new-app
-```
-
-Templates include:
-- **FastAPI**: Full-featured API with health checks, CORS, error handling
-- **Streamlit**: Chat interface with session management
-- Pre-configured Dockerfile optimized for 2GB RAM
-- Environment variable templates
-- Security best practices
-
-### Automation Features
-
-All scripts automatically handle:
-
-**GitHub Integration:**
-- Extracts app name from repository URL
-- Supports both HTTPS and SSH URLs
-- Uses repo name as subdomain (e.g., `my-chat-app.168cap.com`)
-
-**Smart Configuration:**
-- Auto-detects next available port
-- Creates optimized Docker configurations
-- Generates secure NGINX configs with proper headers
-- Sets up health checks based on app type
-
-**Zero-Downtime Deployment:**
-- Tests container health before proceeding
-- Validates NGINX configuration
-- Rolls back on failure
-
-**SSL Automation:**
-- Automatic Let's Encrypt certificate generation
-- Auto-renewal setup
-- HTTPS redirect configuration
-
-### Pre-Deployment Checklist
-
-Before running automation scripts, ensure your GitHub repository has:
-
+Before deployment, ensure your GitHub repo has:
 - [ ] `Dockerfile` in root directory
 - [ ] App runs on port 8000 internally
 - [ ] Health check endpoint (`/health`, `/docs`, or `/_stcore/health` for Streamlit)
 - [ ] `requirements.txt` or equivalent dependencies file
-- [ ] `.env.example` template (optional but recommended)
 
-### Example: Complete App Deployment
+### Complete Example
 
 ```bash
-# 1. Quick deploy (30 seconds of input, 2-3 minutes total)
+# 1. Deploy your app
 ~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/llm-chat-app
 
 # 2. Configure environment variables (if needed)
 nano ~/apps/llm-chat-app/.env
-
-# 3. Restart if env changed
 docker-compose restart llm-chat-app
 
-# 4. Test your app
-curl https://llm-chat-app.168cap.com/health
-# Visit: https://llm-chat-app.168cap.com
+# 3. Your app is live at: https://llm-chat-app.168cap.com
 ```
-
-### Troubleshooting Automation
-
-**Script fails with "port in use":**
-```bash
-# Check what's using the port
-netstat -tulpn | grep :8003
-# Or restart all containers
-docker-compose restart
-```
-
-**SSL certificate fails:**
-```bash
-# Run manually after deployment
-sudo certbot --nginx -d your-app.168cap.com
-```
-
-**Container won't start:**
-```bash
-# Check logs
-docker-compose logs your-app-name
-# Often missing dependencies in requirements.txt
-```
-
-**DNS not resolving:**
-```bash
-# Check DNS propagation (can take up to 24 hours)
-dig your-app.168cap.com
-# Use CloudFlare DNS (1.1.1.1) for faster propagation
-```
-
-This completes the process of adding a new application to your 168cap.com infrastructure.
 
 ## Monitoring and Maintenance
 
