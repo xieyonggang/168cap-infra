@@ -438,7 +438,143 @@ chmod +x ~/168cap-infra/scripts/deploy.sh
 - **Monitor deployment logs** for any suspicious activity
 - **Use specific user** instead of root if possible
 
-### 10. Optional: Non-Root Deployment User
+### 10. Setup GitHub Access for Droplet
+
+To allow your droplet (167.99.64.151) to clone repositories from your GitHub account (yonggangxie), you need to configure SSH access to GitHub.
+
+#### Option A: SSH Key Method (Recommended)
+
+**On your droplet:**
+
+```bash
+# SSH into your droplet
+ssh root@167.99.64.151
+
+# Generate SSH key for GitHub access
+ssh-keygen -t ed25519 -C "droplet-github-access" -f ~/.ssh/github_rsa
+
+# Display the public key
+cat ~/.ssh/github_rsa.pub
+```
+
+**On GitHub:**
+1. Go to GitHub → Settings → SSH and GPG keys
+2. Click "New SSH key"
+3. Title: "168cap-droplet-167.99.64.151"
+4. Paste the public key content from above
+5. Click "Add SSH key"
+
+**Test the connection:**
+```bash
+# Test GitHub SSH connection
+ssh -T -i ~/.ssh/github_rsa git@github.com
+
+# Should show: "Hi yonggangxie! You've successfully authenticated..."
+```
+
+**Configure Git on droplet:**
+```bash
+# Set up Git configuration
+git config --global user.name "yonggangxie"
+git config --global user.email "your-email@domain.com"
+
+# Configure SSH key for GitHub
+echo "Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_rsa" >> ~/.ssh/config
+
+chmod 600 ~/.ssh/config
+```
+
+#### Option B: Personal Access Token Method (Alternative)
+
+**Create GitHub Personal Access Token:**
+1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
+2. Click "Generate new token (classic)"
+3. Name: "168cap-droplet-access"
+4. Select scopes: `repo` (Full control of private repositories)
+5. Click "Generate token"
+6. **Copy the token immediately** (you won't see it again)
+
+**Configure on droplet:**
+```bash
+# SSH into your droplet
+ssh root@167.99.64.151
+
+# Store the token securely
+echo "your_personal_access_token_here" > ~/.github_token
+chmod 600 ~/.github_token
+
+# Configure Git to use token
+git config --global credential.helper store
+```
+
+**Clone repositories using token:**
+```bash
+# Clone using HTTPS with token
+git clone https://your_token@github.com/yonggangxie/your-repo-name.git
+
+# Or set up credential helper
+git config --global url."https://your_token@github.com/".insteadOf "https://github.com/"
+```
+
+#### Test Repository Access
+
+```bash
+# Test cloning one of your repositories
+cd ~/apps
+git clone git@github.com:yonggangxie/your-test-repo.git  # SSH method
+# OR
+git clone https://github.com/yonggangxie/your-test-repo.git  # Token method
+
+# Verify it works
+ls -la your-test-repo/
+```
+
+#### Update Automation Scripts
+
+Your automation scripts will now work with your GitHub repositories:
+
+```bash
+# Example: Deploy any of your repositories
+~/168cap-infra/scripts/quick-deploy.sh https://github.com/yonggangxie/my-llm-chat-app
+
+# The script will automatically clone from your GitHub account
+```
+
+#### Troubleshooting GitHub Access
+
+**"Permission denied (publickey)" error:**
+```bash
+# Test SSH connection to GitHub
+ssh -T git@github.com
+
+# Check SSH key is loaded
+ssh-add -l
+
+# Add key if needed
+ssh-add ~/.ssh/github_rsa
+```
+
+**"Repository not found" error:**
+```bash
+# Verify repository exists and is accessible
+curl -H "Authorization: token your_token" https://api.github.com/repos/yonggangxie/repo-name
+
+# Check if repository is private and you have access
+```
+
+**HTTPS clone fails:**
+```bash
+# Update Git credential helper
+git config --global credential.helper store
+
+# Or use SSH instead of HTTPS
+git remote set-url origin git@github.com:yonggangxie/repo-name.git
+```
+
+### 11. Optional: Non-Root Deployment User
 
 For better security, create a dedicated deployment user:
 
@@ -452,6 +588,7 @@ sudo usermod -aG sudo deploy
 sudo su - deploy
 mkdir -p ~/.ssh
 # Add your public key to ~/.ssh/authorized_keys
+# Also copy GitHub SSH key: cp /root/.ssh/github_rsa* ~/.ssh/
 
 # Update GitHub secret DROPLET_USER to "deploy"
 ```
