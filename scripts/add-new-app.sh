@@ -280,6 +280,7 @@ EOF
     sudo ln -sf "/etc/nginx/sites-available/$SUBDOMAIN" "/etc/nginx/sites-enabled/$SUBDOMAIN"
     
     # Test NGINX configuration
+    print_status "Testing NGINX configuration..."
     if ! sudo nginx -t; then
         print_error "NGINX configuration test failed"
         exit 1

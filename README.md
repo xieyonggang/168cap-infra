@@ -103,7 +103,7 @@ mkdir -p apps
 ### 2. Clone This Infrastructure Repo
 ```bash
 cd ~
-git clone https://github.com/yourusername/168cap-infra.git
+git clone https://github.com/xieyonggang/168cap-infra.git
 ```
 
 ## NGINX Reverse Proxy Configuration
@@ -572,6 +572,96 @@ git config --global credential.helper store
 
 # Or use SSH instead of HTTPS
 git remote set-url origin git@github.com:yonggangxie/repo-name.git
+```
+
+#### Common NGINX Permission Issues
+
+**Error: "Permission denied" when testing NGINX config:**
+```
+nginx: [warn] the "user" directive makes sense only if the master process runs with super-user privileges
+nginx: [emerg] open() "/run/nginx.pid" failed (13: Permission denied)
+```
+
+**Solution - Always use `sudo` for NGINX commands:**
+```bash
+# WRONG - Don't run nginx commands as regular user
+nginx -t
+
+# CORRECT - Always use sudo for NGINX
+sudo nginx -t
+sudo systemctl reload nginx
+sudo systemctl restart nginx
+sudo systemctl status nginx
+
+# When editing NGINX configs, also use sudo
+sudo nano /etc/nginx/sites-available/your-site.com
+sudo ln -sf /etc/nginx/sites-available/your-site.com /etc/nginx/sites-enabled/
+```
+
+#### SSL/Certbot DNSSEC Issues
+
+**Error: DNSSEC validation failure when getting SSL certificates:**
+```
+Certbot failed to authenticate some domains
+DNS problem: DNSSEC: DNSKEY Missing: validation failure
+```
+
+**This indicates your domain has DNSSEC enabled but misconfigured. Solutions:**
+
+**Option 1: Disable DNSSEC (Recommended for quick fix)**
+```bash
+# Check your domain registrar settings and disable DNSSEC
+# Common registrars:
+# - Namecheap: Domain → Advanced DNS → DNSSEC → Disable
+# - GoDaddy: Domain → DNS Management → DNSSEC → Turn Off
+# - Cloudflare: SSL/TLS → Edge Certificates → DNSSEC → Disable
+```
+
+**Option 2: Wait for DNS propagation**
+```bash
+# Check DNS propagation status
+dig 168cap.com
+dig www.168cap.com
+
+# Check from multiple locations
+nslookup 168cap.com 8.8.8.8
+nslookup 168cap.com 1.1.1.1
+
+# Wait 24-48 hours for full propagation
+```
+
+**Option 3: Use DNS challenge instead of HTTP**
+```bash
+# Use DNS challenge method (requires manual DNS record creation)
+sudo certbot certonly --manual --preferred-challenges dns -d 168cap.com -d www.168cap.com
+
+# Follow prompts to add TXT records to your DNS
+# Then install certificates manually
+sudo certbot install --nginx --cert-name 168cap.com
+```
+
+**Option 4: Get certificates for subdomains individually**
+```bash
+# Skip the main domain for now, get certificates for subdomains
+sudo certbot --nginx -d chat.168cap.com
+sudo certbot --nginx -d port.168cap.com
+
+# Try main domain later after DNSSEC is fixed
+sudo certbot --nginx -d 168cap.com -d www.168cap.com
+```
+
+**Temporary workaround for automation scripts:**
+```bash
+# Modify quick-deploy.sh to skip SSL for problematic domains
+# Add this check before certbot command:
+
+if [[ "$SUBDOMAIN" == "168cap.com" || "$SUBDOMAIN" == "www.168cap.com" ]]; then
+    print_warning "Skipping SSL for $SUBDOMAIN due to DNSSEC issues"
+    print_warning "Run manually: sudo certbot --nginx -d $SUBDOMAIN"
+else
+    # Normal SSL setup
+    sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect
+fi
 ```
 
 ### 11. Optional: Non-Root Deployment User

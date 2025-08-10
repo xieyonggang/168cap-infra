@@ -84,6 +84,7 @@ EOF
     fi
     
     # Create NGINX config
+    print_status "Creating NGINX configuration..."
     sudo tee "/etc/nginx/sites-available/$SUBDOMAIN" > /dev/null << EOF
 server {
     listen 80;
@@ -112,10 +113,23 @@ EOF
     if curl -sf "http://localhost:$EXTERNAL_PORT$HEALTH_PATH" > /dev/null; then
         # Get SSL
         print_status "Setting up SSL..."
-        if sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
-            print_success "🎉 Deployed: https://$SUBDOMAIN"
+        
+        # Check for known problematic domains (DNSSEC issues)
+        if [[ "$SUBDOMAIN" == "168cap.com" || "$SUBDOMAIN" == "www.168cap.com" ]]; then
+            print_warning "⚠️  Skipping SSL for $SUBDOMAIN due to known DNSSEC issues"
+            print_warning "    Fix DNSSEC in domain registrar, then run:"
+            print_warning "    sudo certbot --nginx -d $SUBDOMAIN"
+            print_success "🎉 Deployed: http://$SUBDOMAIN"
         else
-            print_success "🎉 Deployed: http://$SUBDOMAIN (SSL failed - run certbot manually)"
+            if sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
+                print_success "🎉 Deployed: https://$SUBDOMAIN"
+            else
+                print_warning "⚠️  SSL setup failed. Common issues:"
+                print_warning "    1. DNSSEC problems - check domain registrar settings"
+                print_warning "    2. DNS not propagated - wait 24-48 hours"  
+                print_warning "    3. Run manually: sudo certbot --nginx -d $SUBDOMAIN"
+                print_success "🎉 Deployed: http://$SUBDOMAIN (SSL failed)"
+            fi
         fi
     else
         print_error "❌ Deployment failed - check logs: docker-compose logs $SAFE_APP_NAME"
