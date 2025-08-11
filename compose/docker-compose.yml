@@ -26,3 +26,20 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+
+  168port:
+    build: ../../apps/168port
+    container_name: 168port
+    restart: always
+    ports:
+      - "8012:8001"
+    env_file:
+      - ../../apps/168port/.env
+    volumes:
+      - ../../apps/168port/db:/app/db
+      - ../../apps/168port/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 45s
+      timeout: 15s
+      retries: 5
