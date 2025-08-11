@@ -6,7 +6,7 @@ cd ~/apps/168cap && git pull origin main
 cd ~/apps/168board && git pull origin main
 
 echo "== Rebuilding and restarting containers =="
-cd ~/compose
+cd ~/168cap-infra/compose
 docker-compose up -d --build
 
 echo "== Deployment complete =="
