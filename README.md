@@ -19,9 +19,10 @@ This setup allows you to:
 - **Region**: Choose closest to your users
 - **Authentication**: SSH keys (recommended) or password
 
+
 ### 2. Initial Server Configuration
 ```bash
-# Connect to your droplet
+# Connect to your droplet or use digital ocean web console
 ssh root@your_droplet_ip
 
 # Update system packages
@@ -33,24 +34,26 @@ usermod -aG sudo yonggangx
 ```
 
 ### 3. Install Required Software
+
 ```bash
 # Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-usermod -aG docker $USER
+su yonggangx
+sudo curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
 
 # Install Docker Compose
-curl -L "https://github.com/docker/compose/releases/download/v2.39.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-chmod +x /usr/local/bin/docker-compose
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.39.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
 # Install NGINX
-apt install nginx -y
+sudo apt install nginx -y
 
 # Install Certbot for SSL certificates
-apt install certbot python3-certbot-nginx -y
+sudo apt install certbot python3-certbot-nginx -y
 
 # Install Git
-apt install git -y
+sudo apt install git -y
 
 # Restart to apply group changes
 logout
@@ -60,6 +63,7 @@ logout
 ### 4. Configure Firewall
 ```bash
 # Enable UFW firewall
+su root
 ufw enable
 
 # Allow SSH, HTTP, and HTTPS
@@ -84,76 +88,93 @@ In your domain registrar (e.g., Namecheap, GoDaddy), create A records:
 ```bash
 # Check if DNS is working
 dig 168cap.com
-dig chat.168cap.com
 ```
+
+
+### 1. Setup GitHub Access for Droplet
+
+To allow your droplet (167.99.64.151) to clone repositories from your GitHub account (yonggangxie), you need to configure SSH access to GitHub.
+
+**On your droplet:**
+
+```bash
+# SSH into your droplet
+ssh yonggangx@167.99.64.151
+
+# Generate SSH key for GitHub access
+ssh-keygen -t ed25519 -C "droplet-github-access" -f ~/.ssh/github_rsa
+
+# Display the public key
+cat ~/.ssh/github_rsa.pub
+```
+
+**On GitHub:**
+1. Go to GitHub → Settings → SSH and GPG keys
+2. Click "New SSH key"
+3. Title: "168cap-droplet-167.99.64.151"
+4. Paste the public key content from above
+5. Click "Add SSH key"
+
+**Test the connection:**
+```bash
+# Test GitHub SSH connection
+ssh -T -i ~/.ssh/github_rsa git@github.com
+
+# Should show: "Hi yonggangxie! You've successfully authenticated..."
+```
+
+**Configure Git on droplet:**
+```bash
+# Set up Git configuration
+git config --global user.name "yonggangxie"
+git config --global user.email "yonggang.xie@gmail.com"
+
+# Configure SSH key for GitHub
+echo "Host github.com
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_rsa" >> ~/.ssh/config
+
+chmod 600 ~/.ssh/config
+```
+
 
 ## Directory Structure Setup
 
-### 1. Create Directory Structure
+### Clone This Infrastructure Repo
 ```bash
-# Create main directories
+su yonggangx
 cd ~
-mkdir -p 168cap-infra/compose
-mkdir -p 168cap-infra/nginx/sites-available
-mkdir -p 168cap-infra/scripts
-mkdir -p 168cap-infra/logs
-mkdir -p apps
-```
-
-### 2. Clone This Infrastructure Repo
-```bash
-cd ~
-git clone https://github.com/xieyonggang/168cap-infra.git
+git clone git://github.com/xieyonggang/168cap-infra.git
 ```
 
 ## NGINX Reverse Proxy Configuration
 
 ### 1. Create NGINX Site Configurations
-For each domain/subdomain, create a configuration file:
 
-**Main website** (`/etc/nginx/sites-available/168cap.com`):
-```nginx
-server {
-    listen 80;
-    server_name 168cap.com www.168cap.com;
-    
-    location / {
-        proxy_pass http://localhost:8000;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
 ```
+su yonggangx
+cd ~/168cap-infra
+git pull origin main
+sudo cp ~/168cap-infra/nginx/sites-available/* /etc/nginx/sites-available/
 
-**LLM Apps** (e.g., `/etc/nginx/sites-available/chat.168cap.com`):
-```nginx
-server {
-    listen 80;
-    server_name chat.168cap.com;
-    
-    location / {
-        proxy_pass http://localhost:8001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
 ```
 
 ### 2. Enable Sites
 ```bash
 # Enable sites
-ln -s /etc/nginx/sites-available/168cap.com /etc/nginx/sites-enabled/
-ln -s /etc/nginx/sites-available/chat.168cap.com /etc/nginx/sites-enabled/
+su yonggangx
+cd ~/168cap-infra
+git pull origin main
+sudo ln -sf /etc/nginx/sites-available/168cap.com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/168board.168cap.com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/168port.168cap.com /etc/nginx/sites-enabled/
 
 # Test NGINX configuration
-nginx -t
+sudo nginx -t
 
 # Reload NGINX
-systemctl reload nginx
+sudo systemctl reload nginx
 ```
 
 ## SSL Certificates Setup
@@ -161,125 +182,17 @@ systemctl reload nginx
 ### 1. Obtain SSL Certificates
 ```bash
 # Get certificates for all domains
-certbot --nginx -d 168cap.com -d www.168cap.com
-certbot --nginx -d chat.168cap.com
-certbot --nginx -d port.168cap.com
+sudo certbot --nginx -d 168cap.com -d www.168cap.com
+sudo certbot --nginx -d 168board.168cap.com
+sudo certbot --nginx -d 168port.168cap.com
 
 # Set up automatic renewal
-systemctl enable certbot.timer
-```
-
-## Docker Compose Configuration
-
-### 1. Main Docker Compose File
-Create `/compose/docker-compose.yml`:
-```yaml
-version: '3.9'
-
-services:
-  main-website:
-    build: ../apps/main-website
-    container_name: main_website
-    restart: always
-    ports:
-      - "8000:8000"
-    env_file:
-      - ../apps/main-website/.env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  chat-app:
-    build: ../apps/chat-app
-    container_name: chat_app
-    restart: always
-    ports:
-      - "8001:8000"
-    env_file:
-      - ../apps/chat-app/.env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  port-app:
-    build: ../apps/port-app
-    container_name: port_app
-    restart: always
-    ports:
-      - "8002:8000"
-    env_file:
-      - ../apps/port-app/.env
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/docs"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-```
-
-### 2. Individual App Setup
-For each app, ensure it has:
-
-**Dockerfile** (example for FastAPI app):
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-**Environment file** (`.env`):
-```bash
-# App-specific environment variables
-DATABASE_URL=your_database_url
-API_KEY=your_api_key
+sudo systemctl enable certbot.timer
 ```
 
 ## GitHub Actions CI/CD Setup
 
-### 1. Generate SSH Key Pair (if you don't have one)
-
-If you don't already have SSH keys set up for your droplet:
-
-```bash
-# On your local machine, generate a new SSH key pair
-ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/168cap_deploy
-
-# This creates two files:
-# ~/.ssh/168cap_deploy (private key - for GitHub Secrets)
-# ~/.ssh/168cap_deploy.pub (public key - for droplet)
-```
-
-### 2. Add Public Key to Your Droplet
-
-```bash
-# Copy the public key to your droplet
-ssh-copy-id -i ~/.ssh/168cap_deploy.pub root@your_droplet_ip
-
-# Or manually add it:
-# 1. Copy the public key content
-cat ~/.ssh/168cap_deploy.pub
-
-# 2. SSH into your droplet and add to authorized_keys
-ssh root@your_droplet_ip
-mkdir -p ~/.ssh
-echo "your_public_key_content_here" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
-chmod 700 ~/.ssh
-```
-
-### 3. Configure GitHub Repository Secrets
+### 1. Configure GitHub Repository Secrets
 
 In your GitHub repository, go to **Settings** → **Secrets and variables** → **Actions**, then add these secrets:
 
@@ -291,14 +204,15 @@ In your GitHub repository, go to **Settings** → **Secrets and variables** → 
 
 **`DROPLET_USER`** 
 - **Value**: SSH username for your droplet
-- **Example**: `root` or `yonggangx` (your created user)
+- **Example**: `yonggangx` (your created user)
 
 **`DROPLET_SSH_KEY`**
 - **Value**: Your private SSH key content (entire file)
 - **How to get it**:
 ```bash
 # Copy your private key content
-cat ~/.ssh/168cap_deploy
+su yonggangx
+cat ~/.ssh/github_rsa.pub
 
 # Copy the ENTIRE output including:
 # -----BEGIN OPENSSH PRIVATE KEY-----
@@ -329,7 +243,7 @@ cat ~/.ssh/168cap_deploy
 4. **Add DROPLET_SSH_KEY**:
    - Click **New repository secret**
    - Name: `DROPLET_SSH_KEY`
-   - Secret: Paste your entire private key content from `cat ~/.ssh/168cap_deploy`
+   - Secret: Paste your entire private key content from `cat ~/.ssh/github_rsa.pub`
    - **Important**: Include the header and footer lines
    - Click **Add secret**
 
@@ -395,41 +309,6 @@ jobs:
    - Watch the workflow execution
    - Check for any errors in the logs
 
-### 8. Troubleshooting GitHub Actions
-
-**"Permission denied (publickey)" error**:
-```bash
-# Verify your private key is correct
-ssh -i ~/.ssh/168cap_deploy root@your_droplet_ip
-
-# Check if public key is in authorized_keys on droplet
-cat ~/.ssh/authorized_keys
-```
-
-**"Host key verification failed"**:
-- The SSH action might fail on first run due to host key verification
-- Add this to your workflow for first-time setup:
-```yaml
-- name: SSH into Droplet and Deploy
-  uses: appleboy/ssh-action@v1.0.0
-  with:
-    host: ${{ secrets.DROPLET_HOST }}
-    username: ${{ secrets.DROPLET_USER }}
-    key: ${{ secrets.DROPLET_SSH_KEY }}
-    script_stop: true
-    script: |
-      cd ~/168cap-infra/scripts
-      ./deploy.sh
-```
-
-**"deploy.sh not found"**:
-```bash
-# SSH into droplet and verify paths
-ssh root@your_droplet_ip
-ls ~/168cap-infra/scripts/deploy.sh
-chmod +x ~/168cap-infra/scripts/deploy.sh
-```
-
 ### 9. Security Best Practices
 
 - **Use dedicated SSH keys** for GitHub Actions (not your personal keys)
@@ -438,98 +317,15 @@ chmod +x ~/168cap-infra/scripts/deploy.sh
 - **Monitor deployment logs** for any suspicious activity
 - **Use specific user** instead of root if possible
 
-### 10. Setup GitHub Access for Droplet
-
-To allow your droplet (167.99.64.151) to clone repositories from your GitHub account (yonggangxie), you need to configure SSH access to GitHub.
-
-#### Option A: SSH Key Method (Recommended)
-
-**On your droplet:**
-
-```bash
-# SSH into your droplet
-ssh root@167.99.64.151
-
-# Generate SSH key for GitHub access
-ssh-keygen -t ed25519 -C "droplet-github-access" -f ~/.ssh/github_rsa
-
-# Display the public key
-cat ~/.ssh/github_rsa.pub
-```
-
-**On GitHub:**
-1. Go to GitHub → Settings → SSH and GPG keys
-2. Click "New SSH key"
-3. Title: "168cap-droplet-167.99.64.151"
-4. Paste the public key content from above
-5. Click "Add SSH key"
-
-**Test the connection:**
-```bash
-# Test GitHub SSH connection
-ssh -T -i ~/.ssh/github_rsa git@github.com
-
-# Should show: "Hi yonggangxie! You've successfully authenticated..."
-```
-
-**Configure Git on droplet:**
-```bash
-# Set up Git configuration
-git config --global user.name "yonggangxie"
-git config --global user.email "your-email@domain.com"
-
-# Configure SSH key for GitHub
-echo "Host github.com
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/github_rsa" >> ~/.ssh/config
-
-chmod 600 ~/.ssh/config
-```
-
-#### Option B: Personal Access Token Method (Alternative)
-
-**Create GitHub Personal Access Token:**
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)
-2. Click "Generate new token (classic)"
-3. Name: "168cap-droplet-access"
-4. Select scopes: `repo` (Full control of private repositories)
-5. Click "Generate token"
-6. **Copy the token immediately** (you won't see it again)
-
-**Configure on droplet:**
-```bash
-# SSH into your droplet
-ssh root@167.99.64.151
-
-# Store the token securely
-echo "your_personal_access_token_here" > ~/.github_token
-chmod 600 ~/.github_token
-
-# Configure Git to use token
-git config --global credential.helper store
-```
-
-**Clone repositories using token:**
-```bash
-# Clone using HTTPS with token
-git clone https://your_token@github.com/yonggangxie/your-repo-name.git
-
-# Or set up credential helper
-git config --global url."https://your_token@github.com/".insteadOf "https://github.com/"
-```
 
 #### Test Repository Access
 
 ```bash
 # Test cloning one of your repositories
 cd ~/apps
-git clone git@github.com:yonggangxie/your-test-repo.git  # SSH method
-# OR
-git clone https://github.com/yonggangxie/your-test-repo.git  # Token method
-
+git clone git@github.com:yonggangxie/168cap.git  # SSH method
 # Verify it works
-ls -la your-test-repo/
+ls -la 168cap/
 ```
 
 #### Update Automation Scripts
@@ -538,7 +334,7 @@ Your automation scripts will now work with your GitHub repositories:
 
 ```bash
 # Example: Deploy any of your repositories
-~/168cap-infra/scripts/quick-deploy.sh https://github.com/yonggangxie/my-llm-chat-app
+~/168cap-infra/scripts/quick-deploy.sh git://github.com/yonggangxie/my-llm-chat-app
 
 # The script will automatically clone from your GitHub account
 ```
@@ -555,23 +351,6 @@ ssh-add -l
 
 # Add key if needed
 ssh-add ~/.ssh/github_rsa
-```
-
-**"Repository not found" error:**
-```bash
-# Verify repository exists and is accessible
-curl -H "Authorization: token your_token" https://api.github.com/repos/yonggangxie/repo-name
-
-# Check if repository is private and you have access
-```
-
-**HTTPS clone fails:**
-```bash
-# Update Git credential helper
-git config --global credential.helper store
-
-# Or use SSH instead of HTTPS
-git remote set-url origin git@github.com:yonggangxie/repo-name.git
 ```
 
 #### Common NGINX Permission Issues
@@ -617,72 +396,6 @@ DNS problem: DNSSEC: DNSKEY Missing: validation failure
 # - Cloudflare: SSL/TLS → Edge Certificates → DNSSEC → Disable
 ```
 
-**Option 2: Wait for DNS propagation**
-```bash
-# Check DNS propagation status
-dig 168cap.com
-dig www.168cap.com
-
-# Check from multiple locations
-nslookup 168cap.com 8.8.8.8
-nslookup 168cap.com 1.1.1.1
-
-# Wait 24-48 hours for full propagation
-```
-
-**Option 3: Use DNS challenge instead of HTTP**
-```bash
-# Use DNS challenge method (requires manual DNS record creation)
-sudo certbot certonly --manual --preferred-challenges dns -d 168cap.com -d www.168cap.com
-
-# Follow prompts to add TXT records to your DNS
-# Then install certificates manually
-sudo certbot install --nginx --cert-name 168cap.com
-```
-
-**Option 4: Get certificates for subdomains individually**
-```bash
-# Skip the main domain for now, get certificates for subdomains
-sudo certbot --nginx -d chat.168cap.com
-sudo certbot --nginx -d port.168cap.com
-
-# Try main domain later after DNSSEC is fixed
-sudo certbot --nginx -d 168cap.com -d www.168cap.com
-```
-
-**Temporary workaround for automation scripts:**
-```bash
-# Modify quick-deploy.sh to skip SSL for problematic domains
-# Add this check before certbot command:
-
-if [[ "$SUBDOMAIN" == "168cap.com" || "$SUBDOMAIN" == "www.168cap.com" ]]; then
-    print_warning "Skipping SSL for $SUBDOMAIN due to DNSSEC issues"
-    print_warning "Run manually: sudo certbot --nginx -d $SUBDOMAIN"
-else
-    # Normal SSL setup
-    sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect
-fi
-```
-
-### 11. Optional: Non-Root Deployment User
-
-For better security, create a dedicated deployment user:
-
-```bash
-# On your droplet, create deploy user
-sudo adduser deploy
-sudo usermod -aG docker deploy
-sudo usermod -aG sudo deploy
-
-# Set up SSH key for deploy user
-sudo su - deploy
-mkdir -p ~/.ssh
-# Add your public key to ~/.ssh/authorized_keys
-# Also copy GitHub SSH key: cp /root/.ssh/github_rsa* ~/.ssh/
-
-# Update GitHub secret DROPLET_USER to "deploy"
-```
-
 ## Deployment Commands
 
 ### Initial Deployment
@@ -697,10 +410,10 @@ docker-compose up -d --build
 ./scripts/deploy.sh
 
 # Restart specific app
-./scripts/restart.sh chat-app
+./scripts/restart.sh 168board
 
 # View logs
-docker-compose logs -f chat-app
+docker-compose logs -f 168board
 ```
 
 
@@ -710,7 +423,7 @@ Deploy new apps with a single command:
 
 ```bash
 # Deploy any GitHub repo as a new app (uses repo name as subdomain)
-~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/my-chat-app
+~/168cap-infra/scripts/quick-deploy.sh git://github.com/yourusername/my-chat-app
 
 # Or specify custom health check path
 ~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/my-chat-app /docs
