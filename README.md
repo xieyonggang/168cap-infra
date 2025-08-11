@@ -451,16 +451,44 @@ docker-compose logs -f 168board
 ```
 
 
+## Add New Apps (Automated)
+
+Use `scripts/add-new-app.sh` to provision a new app end-to-end. It performs:
+
+- SSH clone into `~/apps/<app>` using `git@github.com:<user>/<repo>.git`
+- Optional `.env` creation from `.env.example`
+- Append the new service to `~/168cap-infra/compose/docker-compose.yml`
+- Create and enable NGINX site in `/etc/nginx/sites-available/<subdomain>` → reload NGINX
+- Obtain HTTPS via Certbot `--nginx --redirect`
+- Verify HTTP and HTTPS endpoints
+- Update `scripts/deploy.sh` to include the new app with resilient pulls
+  - If `git pull` fails for `deploy.sh`, it is refreshed from `origin/main` and made executable
+  - Injects a pull step for the app before compose build, with reclone fallback:
+    `cd ~/apps/<app> && git pull origin main || { rm -rf ~/apps/<app>; git clone git@github.com:<user>/<repo>.git ~/apps/<app>; }`
+
+Run it:
+```bash
+cd ~/168cap-infra/scripts
+chmod +x add-new-app.sh
+./add-new-app.sh
+```
+
+After the script completes, redeploy anytime with:
+```bash
+~/168cap-infra/scripts/deploy.sh
+```
+
+
 ## Adding New Apps - Ultra-Quick Deployment
 
 Deploy new apps with a single command:
 
 ```bash
 # Deploy any GitHub repo as a new app (uses repo name as subdomain)
-~/168cap-infra/scripts/quick-deploy.sh git://github.com/yourusername/my-chat-app
+~/168cap-infra/scripts/quick-deploy.sh git://github.com/xieyonggang/my-chat-app
 
 # Or specify custom health check path
-~/168cap-infra/scripts/quick-deploy.sh https://github.com/yourusername/my-chat-app /docs
+~/168cap-infra/scripts/quick-deploy.sh https://github.com/xieyonggang/my-chat-app /docs
 ```
 
 **What it does automatically:**

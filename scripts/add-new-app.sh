@@ -162,17 +162,24 @@ main() {
         exit 1
     fi
     
-    # Step 1: Clone repository
-    print_status "📥 Cloning repository..."
+    # Step 1: Clone repository via SSH into ~/apps
+    print_status "📥 Cloning repository via SSH..."
+    SSH_URL="git@github.com:${GITHUB_USER}/${REPO_NAME}.git"
+    mkdir -p "$HOME/apps"
     cd "$HOME/apps" || exit 1
     
-    if [[ -d "$SAFE_APP_NAME" ]]; then
+    if [[ -d "$SAFE_APP_NAME/.git" ]]; then
         print_warning "Directory $SAFE_APP_NAME already exists. Pulling latest changes..."
         cd "$SAFE_APP_NAME"
-        git pull origin main || git pull origin master
+        git pull origin main || git pull origin master || {
+          print_warning "git pull failed; recloning repository..."
+          cd "$HOME/apps"
+          rm -rf "$SAFE_APP_NAME"
+          git clone "$SSH_URL" "$SAFE_APP_NAME"
+        }
         cd ..
     else
-        git clone "$REPO_URL" "$SAFE_APP_NAME"
+        git clone "$SSH_URL" "$SAFE_APP_NAME"
     fi
     
     # Step 2: Create .env file if .env.example exists
@@ -356,17 +363,27 @@ EOF
         print_warning "sudo certbot --nginx -d $SUBDOMAIN"
     fi
     
-    # Step 9: Update deployment script
+    # Step 9: Ensure deploy.sh is up to date and includes this app
     print_status "📝 Updating deployment script..."
     DEPLOY_SCRIPT="$HOME/168cap-infra/scripts/deploy.sh"
-    
-    # Backup deploy script
-    cp "$DEPLOY_SCRIPT" "${DEPLOY_SCRIPT}.backup.$(date +%Y%m%d_%H%M%S)"
-    
-    # Add new app to deployment script (before the docker-compose command)
-    sed -i "/cd ~\/apps\/chat-app && git pull origin main/a cd ~/apps/$SAFE_APP_NAME && git pull origin main" "$DEPLOY_SCRIPT"
-    
-    print_success "Updated deployment script"
+
+    # Refresh deploy.sh from origin if local pull fails
+    cd "$HOME/168cap-infra"
+    if ! git pull origin main; then
+        print_warning "git pull failed for 168cap-infra; refreshing deploy.sh from origin/main"
+        rm -f "$DEPLOY_SCRIPT"
+        git fetch origin main || true
+        git checkout origin/main -- scripts/deploy.sh || true
+    fi
+    chmod +x "$DEPLOY_SCRIPT"
+
+    # Inject idempotent app pull step before compose build/up
+    if ! grep -q "cd ~/apps/$SAFE_APP_NAME && git pull" "$DEPLOY_SCRIPT"; then
+        sed -i "/^cd ~\\/168cap-infra\\/compose/i cd ~\/apps\/$SAFE_APP_NAME && git pull origin main || { rm -rf ~\/apps\/$SAFE_APP_NAME; git clone git@github.com:${GITHUB_USER}\/${REPO_NAME}.git ~\/apps\/$SAFE_APP_NAME; }" "$DEPLOY_SCRIPT"
+        print_success "Added app pull step to deploy.sh"
+    else
+        print_status "deploy.sh already contains app pull step for $SAFE_APP_NAME"
+    fi
     
     # Final status report
     echo
