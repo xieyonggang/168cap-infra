@@ -1,12 +1,12 @@
 services:
   168cap:
-    build: ../apps/168cap
+    build: ../../apps/168cap
     container_name: 168cap
     restart: always
     ports:
       - "8000:8000"
     env_file:
-      - ../apps/168cap/.env
+      - ../../apps/168cap/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -14,13 +14,13 @@ services:
       retries: 3
 
   168board:
-    build: ../apps/168board
+    build: ../../apps/168board
     container_name: 168board
     restart: always
     ports:
       - "8011:8000"
     env_file:
-      - ../apps/168board/.env
+      - ../../apps/168board/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
