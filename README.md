@@ -86,9 +86,14 @@ In your domain registrar (e.g., Namecheap, GoDaddy), create A records:
 
 ### 2. Verify DNS Propagation
 ```bash
-# Check if DNS is working
-dig 168cap.com
+# Check if DNS is working and returning your droplet IP
+dig +short 168cap.com A
+dig +short www.168cap.com A
+dig +short 168board.168cap.com A
+dig +short 168port.168cap.com A
 ```
+
+All should resolve to your droplet public IP (e.g., `167.99.64.151`). If `www.168cap.com` is a CNAME, you may see it return `168cap.com` followed by the IP.
 
 
 ### 1. Setup GitHub Access for Droplet
@@ -179,16 +184,34 @@ sudo systemctl reload nginx
 
 ## SSL Certificates Setup
 
-### 1. Obtain SSL Certificates
+### 1. Obtain SSL Certificates with Redirect
 ```bash
-# Get certificates for all domains
-sudo certbot --nginx -d 168cap.com -d www.168cap.com
-sudo certbot --nginx -d 168board.168cap.com
-sudo certbot --nginx -d 168port.168cap.com
+# Ensure HTTPS is allowed and NGINX config is valid
+sudo ufw allow 443/tcp
+sudo nginx -t && sudo systemctl reload nginx
 
-# Set up automatic renewal
-sudo systemctl enable certbot.timer
+# Issue certificates (includes automatic HTTP→HTTPS redirect)
+sudo certbot --nginx -d 168cap.com -d www.168cap.com \
+  --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
+
+# Subdomains (after DNS resolves to the droplet IP)
+sudo certbot --nginx -d 168board.168cap.com \
+  --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
+sudo certbot --nginx -d 168port.168cap.com \
+  --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
+
+# Verify HTTPS
+curl -I https://168cap.com | cat
+curl -I https://www.168cap.com | cat
+curl -I https://168board.168cap.com | cat
+curl -I https://168port.168cap.com | cat
+
+# Auto-renew check
+systemctl list-timers | grep certbot | cat
+sudo certbot renew --dry-run | cat
 ```
+
+Note: Certbot will write managed HTTPS server blocks under `/etc/nginx/sites-available/` and enable them via symlinks. If you later update those NGINX files from this repo, you may need to re-run Certbot to re-apply HTTPS blocks and headers.
 
 ## GitHub Actions CI/CD Setup
 
@@ -404,6 +427,17 @@ cd ~/168cap-infra/compose
 docker-compose up -d --build
 ```
 
+#### Expected Port Mappings (host → container)
+- 168cap: `8000 → 80` (main site)
+- 168board: `8011 → 80`
+
+Quick checks from droplet once containers are up:
+```bash
+curl -I http://localhost:8000 | cat
+curl -I http://localhost:8011 | cat
+sudo nginx -t && sudo systemctl reload nginx
+```
+
 ### Update Apps
 ```bash
 # Full deployment (pulls latest code and rebuilds)
@@ -446,7 +480,7 @@ Deploy new apps with a single command:
 
 Before deployment, ensure your GitHub repo has:
 - [ ] `Dockerfile` in root directory
-- [ ] App runs on port 8000 internally
+- [ ] App listens on an internal port (commonly 80 or 8000). Configure the host:container port mapping in Compose and NGINX accordingly
 - [ ] Health check endpoint (`/health`, `/docs`, or `/_stcore/health` for Streamlit)
 - [ ] `requirements.txt` or equivalent dependencies file
 
