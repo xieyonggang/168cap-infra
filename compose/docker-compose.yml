@@ -35,6 +35,10 @@ services:
       - "8012:8001"
     env_file:
       - ../../apps/168port/.env
+    environment:
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8001
+      - UVICORN_ROOT_PATH=/apps/168port
     volumes:
       - ../../apps/168port/db:/app/db
       - ../../apps/168port/logs:/app/logs

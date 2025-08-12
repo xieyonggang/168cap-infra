@@ -172,8 +172,6 @@ su yonggangx
 cd ~/168cap-infra
 git pull origin main
 sudo ln -sf /etc/nginx/sites-available/168cap.com /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/168board.168cap.com /etc/nginx/sites-enabled/
-sudo ln -sf /etc/nginx/sites-available/168port.168cap.com /etc/nginx/sites-enabled/
 
 # Test NGINX configuration
 sudo nginx -t
@@ -181,6 +179,13 @@ sudo nginx -t
 # Reload NGINX
 sudo systemctl reload nginx
 ```
+
+### Path-based routing
+
+This setup serves app UIs under the main site for simpler TLS and CAA management:
+
+- https://168cap.com/apps/168board/ → container on localhost:8011
+- https://168cap.com/apps/168port/ → container on localhost:8012
 
 ## SSL Certificates Setup
 
@@ -194,17 +199,11 @@ sudo nginx -t && sudo systemctl reload nginx
 sudo certbot --nginx -d 168cap.com -d www.168cap.com \
   --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
 
-# Subdomains (after DNS resolves to the droplet IP)
-sudo certbot --nginx -d 168board.168cap.com \
-  --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
-sudo certbot --nginx -d 168port.168cap.com \
-  --non-interactive --agree-tos -m yonggang.xie@gmail.com --redirect
-
 # Verify HTTPS
 curl -I https://168cap.com | cat
 curl -I https://www.168cap.com | cat
-curl -I https://168board.168cap.com | cat
-curl -I https://168port.168cap.com | cat
+curl -I https://168cap.com/apps/168board/ | cat
+curl -I https://168cap.com/apps/168port/ | cat
 
 # Auto-renew check
 systemctl list-timers | grep certbot | cat
