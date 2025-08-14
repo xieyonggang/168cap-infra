@@ -2,6 +2,6 @@ Usage: specify modules to deploy in the last non-empty line below, separated by 
 
 Examples:
 - all
-- 168port, 168board
+- 168port,168board
 - 168cap
 168port
