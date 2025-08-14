@@ -9,12 +9,24 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read deployment modules from deploy.md (last non-empty line)
+        id: read_modules
+        run: |
+          modules=$(grep -v '^\s*$' deploy.md | tail -n 1 | tr -d '\r')
+          if [ -z "$modules" ]; then modules="all"; fi
+          echo "MODULES=$modules" >> $GITHUB_ENV
+          echo "modules=$modules" >> $GITHUB_OUTPUT
+
       - name: SSH into Droplet and Deploy
         uses: appleboy/ssh-action@v1.0.0
         with:
           host: ${{ secrets.DROPLET_HOST }}
           username: ${{ secrets.DROPLET_USER }}
           key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: MODULES
           script: |
             cd ~/168cap-infra/scripts
-            ./deploy.sh
+            ./deploy.sh "${MODULES:-all}"
