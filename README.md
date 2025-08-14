@@ -234,7 +234,7 @@ In your GitHub repository, go to **Settings** → **Secrets and variables** → 
 ```bash
 # Copy your private key content
 su yonggangx
-cat ~/.ssh/github_rsa.pub
+cat ~/.ssh/github_rsa
 
 # Copy the ENTIRE output including:
 # -----BEGIN OPENSSH PRIVATE KEY-----
@@ -265,7 +265,7 @@ cat ~/.ssh/github_rsa.pub
 4. **Add DROPLET_SSH_KEY**:
    - Click **New repository secret**
    - Name: `DROPLET_SSH_KEY`
-   - Secret: Paste your entire private key content from `cat ~/.ssh/github_rsa.pub`
+    - Secret: Paste your entire private key content from `cat ~/.ssh/github_rsa`
    - **Important**: Include the header and footer lines
    - Click **Add secret**
 
