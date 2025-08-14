@@ -28,5 +28,11 @@ jobs:
           key: ${{ secrets.DROPLET_SSH_KEY }}
           envs: MODULES
           script: |
+            cd ~/168cap-infra
+            git fetch origin main
+            git checkout -f main || git switch -f main || true
+            git reset --hard origin/main
+            git clean -fd
             cd ~/168cap-infra/scripts
-            ./deploy.sh "${MODULES:-all}"
+            chmod +x deploy.sh
+            bash ./deploy.sh "${MODULES:-all}"

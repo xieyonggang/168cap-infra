@@ -19,14 +19,15 @@ fi
 
 echo "== Modules to deploy: ${MODULES[*]} =="
 
-echo "== Pulling latest infra repo (compose/nginx) =="
-cd ~/168cap-infra && git pull origin main
-
 echo "== Pulling latest app code =="
 for app in "${MODULES[@]}"; do
   if [ -d "$HOME/apps/$app" ]; then
     echo "-- Updating $app"
-    cd "$HOME/apps/$app" && git pull origin main
+    cd "$HOME/apps/$app"
+    git fetch origin main
+    git checkout -f main || git switch -f main || true
+    git reset --hard origin/main
+    git clean -fd
   else
     echo "-- Skipping $app (directory not found at $HOME/apps/$app)"
   fi
