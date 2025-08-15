@@ -5,8 +5,6 @@ services:
     restart: always
     ports:
       - "8000:80"
-    env_file:
-      - ../../apps/168cap/.env
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost/"]
       interval: 30s
