@@ -1,22 +1,35 @@
 name: Deploy to Droplet
 
 on:
-  push:
-    branches: [main]
-    paths: [deploy.md]
+  issues:
+    types: [opened]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: startsWith(github.event.issue.title, 'deploy')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Read deployment modules from deploy.md (last non-empty line)
-        id: read_modules
+      - name: Parse deployment modules from issue title
+        id: parse_modules
         run: |
-          modules=$(grep -v '^\s*$' deploy.md | tail -n 1 | tr -d '\r')
-          if [ -z "$modules" ]; then modules="all"; fi
+          issue_title="${{ github.event.issue.title }}"
+          echo "Issue title: $issue_title"
+          
+          # Extract modules after "deploy" keyword
+          modules_raw=$(echo "$issue_title" | sed 's/^deploy[[:space:]]*//' | tr -d '\r')
+          
+          # If no modules specified after deploy, deploy all
+          if [ -z "$modules_raw" ] || [ "$modules_raw" = "deploy" ]; then
+            modules="all"
+          else
+            # Convert comma-separated list to space-separated for the deploy script
+            modules=$(echo "$modules_raw" | tr ',' ' ' | sed 's/[[:space:]]\+/ /g' | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+          fi
+          
+          echo "Parsed modules: $modules"
           echo "MODULES=$modules" >> $GITHUB_ENV
           echo "modules=$modules" >> $GITHUB_OUTPUT
 
