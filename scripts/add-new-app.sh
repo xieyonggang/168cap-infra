@@ -46,10 +46,10 @@ get_next_port() {
     fi
 }
 
-# Function to validate domain name
-validate_domain() {
-    local domain=$1
-    if [[ ! $domain =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*$ ]]; then
+# Function to validate app path
+validate_app_path() {
+    local path=$1
+    if [[ ! $path =~ ^/apps/[a-zA-Z0-9][a-zA-Z0-9_-]*$ ]]; then
         return 1
     fi
     return 0
@@ -111,23 +111,27 @@ main() {
         exit 1
     fi
     
-    # Use repo name as app name and generate subdomain
+    # Use repo name as app name and generate app path
     APP_NAME="$REPO_NAME"
-    SUBDOMAIN="${REPO_NAME}.168cap.com"
+    APP_PATH="/apps/${REPO_NAME}"
     
     # Ask for confirmation or allow override
     echo
     print_status "Extracted configuration:"
     echo "  Repository: $REPO_URL"
     echo "  App Name: $APP_NAME"
-    echo "  Subdomain: $SUBDOMAIN"
+    echo "  App Path: $APP_PATH"
     echo
     
-    read -p "Use different subdomain? (press enter to keep '$SUBDOMAIN' or type new one): " CUSTOM_SUBDOMAIN
-    if [[ -n "$CUSTOM_SUBDOMAIN" ]]; then
-        SUBDOMAIN="$CUSTOM_SUBDOMAIN"
-        if ! validate_domain "$SUBDOMAIN"; then
-            print_error "Invalid domain format: $SUBDOMAIN"
+    read -p "Use different app path? (press enter to keep '$APP_PATH' or type new one): " CUSTOM_APP_PATH
+    if [[ -n "$CUSTOM_APP_PATH" ]]; then
+        # Ensure path starts with /apps/
+        if [[ ! "$CUSTOM_APP_PATH" =~ ^/apps/ ]]; then
+            CUSTOM_APP_PATH="/apps${CUSTOM_APP_PATH#/}"
+        fi
+        APP_PATH="$CUSTOM_APP_PATH"
+        if ! validate_app_path "$APP_PATH"; then
+            print_error "Invalid app path format: $APP_PATH (must be /apps/[name] with alphanumeric characters, hyphens, or underscores)"
             exit 1
         fi
     fi
@@ -143,7 +147,7 @@ main() {
     echo "  App Name: $APP_NAME"
     echo "  Safe Name: $SAFE_APP_NAME"
     echo "  Container: ${CONTAINER_NAME}"
-    echo "  Domain: $SUBDOMAIN"
+    echo "  App Path: $APP_PATH"
     echo "  Port: $EXTERNAL_PORT"
     echo "  Health Check: $HEALTH_PATH"
     echo "  Repository: $REPO_URL"
@@ -234,14 +238,16 @@ EOF
     
     print_success "Added service to docker-compose.yml"
     
-    # Step 4: Create NGINX configuration
-    print_status "🌐 Creating NGINX configuration..."
-    NGINX_CONFIG="/etc/nginx/sites-available/$SUBDOMAIN"
+    # Step 4: Update main NGINX configuration to add app route
+    print_status "🌐 Updating NGINX configuration..."
+    MAIN_NGINX_CONFIG="/etc/nginx/sites-available/168cap.com"
     
-    sudo tee "$NGINX_CONFIG" > /dev/null << EOF
+    # Check if main config exists, if not create it
+    if [[ ! -f "$MAIN_NGINX_CONFIG" ]]; then
+        sudo tee "$MAIN_NGINX_CONFIG" > /dev/null << EOF
 server {
     listen 80;
-    server_name $SUBDOMAIN;
+    server_name 168cap.com www.168cap.com;
     
     # Security headers
     add_header X-Frame-Options "SAMEORIGIN" always;
@@ -250,28 +256,10 @@ server {
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
     add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
     
-    # Proxy settings
+    # Root location
     location / {
-        proxy_pass http://localhost:$EXTERNAL_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_cache_bypass \$http_upgrade;
-        
-        # Timeouts
-        proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
-        proxy_read_timeout 60s;
-        
-        # Buffer settings
-        proxy_buffering on;
-        proxy_buffer_size 128k;
-        proxy_buffers 4 256k;
-        proxy_busy_buffers_size 256k;
+        return 200 "168cap Infrastructure - Apps available at /apps/[app-name]";
+        add_header Content-Type text/plain;
     }
     
     # Health check endpoint
@@ -282,9 +270,65 @@ server {
     }
 }
 EOF
+        sudo ln -sf "$MAIN_NGINX_CONFIG" "/etc/nginx/sites-enabled/168cap.com"
+    fi
     
-    # Enable the site
-    sudo ln -sf "/etc/nginx/sites-available/$SUBDOMAIN" "/etc/nginx/sites-enabled/$SUBDOMAIN"
+    # Add app route to main config
+    # Create a temporary file with the new location block
+    TEMP_CONFIG=$(mktemp)
+    
+    # Add the new app location before the closing brace
+    sed '/^}/i\
+    # App: '"$APP_NAME"'\
+    location '"$APP_PATH"' {\
+        proxy_pass http://localhost:'"$EXTERNAL_PORT"';\
+        proxy_http_version 1.1;\
+        proxy_set_header Upgrade \$http_upgrade;\
+        proxy_set_header Connection '\''upgrade'\'';\
+        proxy_set_header Host \$host;\
+        proxy_set_header X-Real-IP \$remote_addr;\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto \$scheme;\
+        proxy_cache_bypass \$http_upgrade;\
+        \
+        # Timeouts\
+        proxy_connect_timeout 60s;\
+        proxy_send_timeout 60s;\
+        proxy_read_timeout 60s;\
+        \
+        # Buffer settings\
+        proxy_buffering on;\
+        proxy_buffer_size 128k;\
+        proxy_buffers 4 256k;\
+        proxy_busy_buffers_size 256k;\
+    }\
+    \
+    location '"$APP_PATH"'/ {\
+        proxy_pass http://localhost:'"$EXTERNAL_PORT"'/;\
+        proxy_http_version 1.1;\
+        proxy_set_header Upgrade \$http_upgrade;\
+        proxy_set_header Connection '\''upgrade'\'';\
+        proxy_set_header Host \$host;\
+        proxy_set_header X-Real-IP \$remote_addr;\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto \$scheme;\
+        proxy_cache_bypass \$http_upgrade;\
+        \
+        # Timeouts\
+        proxy_connect_timeout 60s;\
+        proxy_send_timeout 60s;\
+        proxy_read_timeout 60s;\
+        \
+        # Buffer settings\
+        proxy_buffering on;\
+        proxy_buffer_size 128k;\
+        proxy_buffers 4 256k;\
+        proxy_busy_buffers_size 256k;\
+    }' "$MAIN_NGINX_CONFIG" > "$TEMP_CONFIG"
+    
+    # Replace original with updated config
+    sudo cp "$TEMP_CONFIG" "$MAIN_NGINX_CONFIG"
+    rm "$TEMP_CONFIG"
     
     # Test NGINX configuration
     print_status "Testing NGINX configuration..."
@@ -340,27 +384,31 @@ EOF
     
     # Step 7: Test HTTP connectivity
     print_status "🌐 Testing HTTP connectivity..."
-    if curl -sf "http://$SUBDOMAIN$HEALTH_PATH" > /dev/null; then
+    if curl -sf "http://168cap.com$APP_PATH$HEALTH_PATH" > /dev/null; then
         print_success "HTTP connectivity working"
     else
         print_warning "HTTP test failed. This might be normal if DNS hasn't propagated yet."
     fi
     
-    # Step 8: Setup SSL certificate
-    print_status "🔒 Setting up SSL certificate..."
-    if sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
-        print_success "SSL certificate obtained and configured"
-        
-        # Test HTTPS
-        sleep 5
-        if curl -sf "https://$SUBDOMAIN$HEALTH_PATH" > /dev/null; then
-            print_success "HTTPS connectivity working"
+    # Step 8: Setup SSL certificate (only for main domain if not already done)
+    print_status "🔒 Checking SSL certificate..."
+    if [[ ! -f "/etc/letsencrypt/live/168cap.com/fullchain.pem" ]]; then
+        if sudo certbot --nginx -d "168cap.com" -d "www.168cap.com" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
+            print_success "SSL certificate obtained and configured"
         else
-            print_warning "HTTPS test failed. Certificate might need time to propagate."
+            print_warning "SSL certificate setup failed. You can run this manually later:"
+            print_warning "sudo certbot --nginx -d 168cap.com -d www.168cap.com"
         fi
     else
-        print_warning "SSL certificate setup failed. You can run this manually later:"
-        print_warning "sudo certbot --nginx -d $SUBDOMAIN"
+        print_success "SSL certificate already exists for 168cap.com"
+    fi
+    
+    # Test HTTPS
+    sleep 5
+    if curl -sf "https://168cap.com$APP_PATH$HEALTH_PATH" > /dev/null; then
+        print_success "HTTPS connectivity working"
+    else
+        print_warning "HTTPS test failed. Certificate might need time to propagate."
     fi
     
     # Step 9: Ensure deploy.sh is up to date and includes this app
@@ -391,13 +439,13 @@ EOF
     echo "=================================================="
     echo "App Name: $APP_NAME"
     echo "Container: $CONTAINER_NAME"
-    echo "Domain: https://$SUBDOMAIN"
+    echo "App URL: https://168cap.com$APP_PATH"
     echo "Port: $EXTERNAL_PORT"
     echo "Health Check: $HEALTH_PATH"
     echo
     print_status "Next steps:"
     echo "1. Edit environment variables: nano $HOME/apps/$SAFE_APP_NAME/.env"
-    echo "2. Test your app: https://$SUBDOMAIN"
+    echo "2. Test your app: https://168cap.com$APP_PATH"
     echo "3. Check container logs: docker-compose logs -f $SAFE_APP_NAME"
     echo "4. Monitor resources: docker stats"
     echo

@@ -30,14 +30,14 @@ main() {
         GITHUB_USER="${BASH_REMATCH[1]}"
         REPO_NAME="${BASH_REMATCH[2]%.git}"
         APP_NAME="$REPO_NAME"
-        SUBDOMAIN="${REPO_NAME}.168cap.com"
+        APP_PATH="/apps/${REPO_NAME}"
         SSH_URL="git@github.com:${GITHUB_USER}/${REPO_NAME}.git"
     else
         print_error "Invalid GitHub URL"
         exit 1
     fi
     
-    print_status "🚀 Quick deploying: $APP_NAME → https://$SUBDOMAIN"
+    print_status "🚀 Quick deploying: $APP_NAME → https://168cap.com$APP_PATH"
     
     # Get next port
     COMPOSE_FILE="$HOME/168cap-infra/compose/docker-compose.yml"
@@ -92,23 +92,65 @@ main() {
 EOF
     fi
     
-    # Create NGINX config
-    print_status "Creating NGINX configuration..."
-    sudo tee "/etc/nginx/sites-available/$SUBDOMAIN" > /dev/null << EOF
+    # Update main NGINX config to add app route
+    print_status "Updating NGINX configuration..."
+    MAIN_NGINX_CONFIG="/etc/nginx/sites-available/168cap.com"
+    
+    # Check if main config exists, if not create it
+    if [[ ! -f "$MAIN_NGINX_CONFIG" ]]; then
+        sudo tee "$MAIN_NGINX_CONFIG" > /dev/null << EOF
 server {
     listen 80;
-    server_name $SUBDOMAIN;
+    server_name 168cap.com www.168cap.com;
+    
+    # Root location
     location / {
-        proxy_pass http://localhost:$EXTERNAL_PORT;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        return 200 "168cap Infrastructure - Apps available at /apps/[app-name]";
+        add_header Content-Type text/plain;
+    }
+    
+    # Health check endpoint
+    location /nginx-health {
+        access_log off;
+        return 200 "healthy\\n";
+        add_header Content-Type text/plain;
     }
 }
 EOF
+        sudo ln -sf "$MAIN_NGINX_CONFIG" "/etc/nginx/sites-enabled/168cap.com"
+    fi
     
-    sudo ln -sf "/etc/nginx/sites-available/$SUBDOMAIN" "/etc/nginx/sites-enabled/"
+    # Add app route to main config
+    TEMP_CONFIG=$(mktemp)
+    sed '/^}/i\
+    # App: '"$APP_NAME"'\
+    location '"$APP_PATH"' {\
+        proxy_pass http://localhost:'"$EXTERNAL_PORT"';\
+        proxy_http_version 1.1;\
+        proxy_set_header Upgrade \$http_upgrade;\
+        proxy_set_header Connection '\''upgrade'\'';\
+        proxy_set_header Host \$host;\
+        proxy_set_header X-Real-IP \$remote_addr;\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto \$scheme;\
+        proxy_cache_bypass \$http_upgrade;\
+    }\
+    \
+    location '"$APP_PATH"'/ {\
+        proxy_pass http://localhost:'"$EXTERNAL_PORT"'/;\
+        proxy_http_version 1.1;\
+        proxy_set_header Upgrade \$http_upgrade;\
+        proxy_set_header Connection '\''upgrade'\'';\
+        proxy_set_header Host \$host;\
+        proxy_set_header X-Real-IP \$remote_addr;\
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\
+        proxy_set_header X-Forwarded-Proto \$scheme;\
+        proxy_cache_bypass \$http_upgrade;\
+    }' "$MAIN_NGINX_CONFIG" > "$TEMP_CONFIG"
+    
+    sudo cp "$TEMP_CONFIG" "$MAIN_NGINX_CONFIG"
+    rm "$TEMP_CONFIG"
+    
     sudo nginx -t && sudo systemctl reload nginx
     
     # Deploy
@@ -120,25 +162,21 @@ EOF
     sleep 15
     
     if curl -sf "http://localhost:$EXTERNAL_PORT$HEALTH_PATH" > /dev/null; then
-        # Get SSL
-        print_status "Setting up SSL..."
+        # Check SSL for main domain
+        print_status "Checking SSL certificate..."
         
-        # Check for known problematic domains (DNSSEC issues)
-        if [[ "$SUBDOMAIN" == "168cap.com" || "$SUBDOMAIN" == "www.168cap.com" ]]; then
-            print_warning "⚠️  Skipping SSL for $SUBDOMAIN due to known DNSSEC issues"
-            print_warning "    Fix DNSSEC in domain registrar, then run:"
-            print_warning "    sudo certbot --nginx -d $SUBDOMAIN"
-            print_success "🎉 Deployed: http://$SUBDOMAIN"
-        else
-            if sudo certbot --nginx -d "$SUBDOMAIN" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
-                print_success "🎉 Deployed: https://$SUBDOMAIN"
+        if [[ ! -f "/etc/letsencrypt/live/168cap.com/fullchain.pem" ]]; then
+            if sudo certbot --nginx -d "168cap.com" -d "www.168cap.com" --non-interactive --agree-tos --email "admin@168cap.com" --redirect; then
+                print_success "🎉 Deployed: https://168cap.com$APP_PATH"
             else
                 print_warning "⚠️  SSL setup failed. Common issues:"
                 print_warning "    1. DNSSEC problems - check domain registrar settings"
                 print_warning "    2. DNS not propagated - wait 24-48 hours"  
-                print_warning "    3. Run manually: sudo certbot --nginx -d $SUBDOMAIN"
-                print_success "🎉 Deployed: http://$SUBDOMAIN (SSL failed)"
+                print_warning "    3. Run manually: sudo certbot --nginx -d 168cap.com -d www.168cap.com"
+                print_success "🎉 Deployed: http://168cap.com$APP_PATH (SSL failed)"
             fi
+        else
+            print_success "🎉 Deployed: https://168cap.com$APP_PATH"
         fi
     else
         print_error "❌ Deployment failed - check logs: docker-compose logs $SAFE_APP_NAME"

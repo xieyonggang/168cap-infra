@@ -1,4 +1,23 @@
 services:
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    restart: always
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: 168cap_db
+      POSTGRES_USER: yonggang
+      POSTGRES_PASSWORD: yong123gang
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yonggang -d 168cap_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
   168cap:
     build: ../../apps/168cap
     container_name: 168cap
@@ -45,3 +64,6 @@ services:
       interval: 45s
       timeout: 15s
       retries: 5
+
+volumes:
+  postgres_data:
