@@ -186,6 +186,7 @@ This setup serves app UIs under the main site for simpler TLS and CAA management
 
 - https://168cap.com/apps/168board/ → container on localhost:8011
 - https://168cap.com/apps/168port/ → container on localhost:8012
+- https://168cap.com/apps/[new-app]/ → container on localhost:[port]
 
 ## SSL Certificates Setup
 
@@ -418,6 +419,39 @@ DNS problem: DNSSEC: DNSKEY Missing: validation failure
 # - Cloudflare: SSL/TLS → Edge Certificates → DNSSEC → Disable
 ```
 
+## Database Setup
+
+### PostgreSQL Database
+The infrastructure includes a PostgreSQL 16 database service:
+
+```bash
+# Start the database
+cd ~/168cap-infra/compose
+docker-compose up -d db
+
+# Connect to database
+docker-compose exec db psql -U yonggang -d 168cap_db
+
+# Connection details:
+# Host: localhost (from host) or db (from containers)
+# Port: 5433 (external) or 5432 (internal)
+# Database: 168cap_db
+# User: yonggang
+# Password: yong123gang
+```
+
+### Database Environment Variables
+Add these to your app's `.env` file to connect to the database:
+
+```bash
+DATABASE_URL=postgresql://yonggang:yong123gang@db:5432/168cap_db
+POSTGRES_HOST=db
+POSTGRES_PORT=5432
+POSTGRES_DB=168cap_db
+POSTGRES_USER=yonggang
+POSTGRES_PASSWORD=yong123gang
+```
+
 ## Deployment Commands
 
 ### Initial Deployment
@@ -427,13 +461,22 @@ docker-compose up -d --build
 ```
 
 #### Expected Port Mappings (host → container)
+- Database: `5433 → 5432` (PostgreSQL)
 - 168cap: `8000 → 80` (main site)
 - 168board: `8011 → 80`
+- 168port: `8012 → 8001`
 
 Quick checks from droplet once containers are up:
 ```bash
+# Check database
+docker-compose exec db pg_isready -U yonggang -d 168cap_db
+
+# Check apps
 curl -I http://localhost:8000 | cat
 curl -I http://localhost:8011 | cat
+curl -I http://localhost:8012 | cat
+
+# Check NGINX
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
@@ -442,57 +485,65 @@ sudo nginx -t && sudo systemctl reload nginx
 # Full deployment (pulls latest code and rebuilds)
 ./scripts/deploy.sh
 
+# Deploy specific apps
+./scripts/deploy.sh 168cap,168board
+
 # Restart specific app
 ./scripts/restart.sh 168board
 
 # View logs
 docker-compose logs -f 168board
+docker-compose logs -f db
 ```
 
-## Adding New Apps - Ultra-Quick Deployment
+## Adding New Apps
 
-Deploy new apps with a single command:
+Deploy new apps using the comprehensive setup script:
 
 ```bash
-# Deploy any GitHub repo as a new app (uses repo name as subdomain)
+# Deploy any GitHub repo as a new app (uses path-based routing)
 su yonggangx
 cd ~
-chmod 777 ~/168cap-infra/scripts/quick-deploy.sh
-./168cap-infra/scripts/quick-deploy.sh git://github.com/xieyonggang/my-chat-app
+chmod +x ~/168cap-infra/scripts/add-new-app.sh
+./168cap-infra/scripts/add-new-app.sh
 ```
 
 **What it does automatically:**
-- ✅ Extracts app name from GitHub URL → Creates `my-chat-app.168cap.com`
+- ✅ Extracts app name from GitHub URL → Creates `/apps/app-name` path
 - ✅ Finds next available port
-- ✅ Clones/updates your app
+- ✅ Clones/updates your app via SSH
 - ✅ Creates `.env` file from template
 - ✅ Updates Docker Compose config
-- ✅ Creates NGINX reverse proxy
+- ✅ Updates main NGINX configuration with app route
 - ✅ Deploys container
-- ✅ Sets up SSL certificate
+- ✅ Sets up SSL certificate for main domain
 - ✅ Tests everything works
+- ✅ Updates deployment scripts
 
-**Time: ~2-3 minutes total** ⚡
+**Time: ~3-5 minutes total** ⚡
 
 ### Requirements for Your App Repository
 
 Before deployment, ensure your GitHub repo has:
 - [ ] `Dockerfile` in root directory
-- [ ] App listens on an internal port (commonly 80 or 8000). Configure the host:container port mapping in Compose and NGINX accordingly
+- [ ] App listens on port 8000 internally
 - [ ] Health check endpoint (`/health`, `/docs`, or `/_stcore/health` for Streamlit)
 - [ ] `requirements.txt` or equivalent dependencies file
 
 ### Complete Example
 
 ```bash
-# 1. Deploy your app
-~/168cap-infra/scripts/quick-deploy.sh https://github.com/xieyonggang/llm-chat-app
+# 1. Run the setup script
+~/168cap-infra/scripts/add-new-app.sh
 
-# 2. Configure environment variables (if needed)
+# 2. Enter GitHub repository URL when prompted
+# Example: https://github.com/xieyonggang/llm-chat-app
+
+# 3. Configure environment variables (if needed)
 nano ~/apps/llm-chat-app/.env
 docker-compose restart llm-chat-app
 
-# 3. Your app is live at: https://llm-chat-app.168cap.com
+# 4. Your app is live at: https://168cap.com/apps/llm-chat-app
 ```
 
 ## Monitoring and Maintenance
@@ -545,19 +596,22 @@ docker-compose ps
 ```
 ~/168cap-infra/
 ├── compose/
-│   └── docker-compose.yml     # Main orchestration file
+│   ├── docker-compose.yml     # Main orchestration file
+│   └── init-scripts/          # Database initialization scripts
 ├── nginx/
 │   └── sites-available/       # NGINX configs (copied to /etc/nginx/)
 ├── scripts/
+│   ├── add-new-app.sh        # New app setup script
 │   ├── deploy.sh             # Full deployment script
 │   └── restart.sh            # Service restart script
+├── templates/                 # App templates
 ├── logs/                     # Optional log storage
 └── .github/workflows/        # CI/CD automation
 
 ~/apps/
-├── main-website/             # Your main 168cap.com site
-├── chat-app/                 # LLM chat application
-├── port-app/                 # Portfolio or other app
+├── 168cap/                   # Your main 168cap.com site
+├── 168board/                 # Board application
+├── 168port/                  # Portfolio application
 └── [other-apps]/             # Additional applications
 ```
 
