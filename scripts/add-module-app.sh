@@ -104,8 +104,9 @@ main() {
     
     # Check if module already exists
     MODULE_PATH="/apps/$MODULE_NAME"
-    if [[ -d "$HOME/apps/$MODULE_NAME" ]]; then
-        print_warning "Module directory already exists: $HOME/apps/$MODULE_NAME"
+    MODULE_DIR="$HOME/apps/module"
+    if [[ -d "$MODULE_DIR" ]]; then
+        print_warning "Module directory already exists: $MODULE_DIR"
         read -p "Continue with existing directory? (y/n): " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -125,13 +126,14 @@ main() {
     # Get GitHub repository URL (optional)
     read -p "Enter GitHub repository URL (optional, press enter to skip): " REPO_URL
     
-    # Sanitize module name for container/directory use
+    # Sanitize module name for container use (directory is hardcoded to 'module')
     SAFE_MODULE_NAME=$(echo "$MODULE_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')
     
     print_status "Configuration:"
     echo "  Module Name: $MODULE_NAME"
     echo "  Safe Name: $SAFE_MODULE_NAME"
     echo "  Module Path: $MODULE_PATH"
+    echo "  Module Directory: $MODULE_DIR"
     echo "  App Port: $APP_PORT"
     echo "  Health Check: $HEALTH_PATH"
     if [[ -n "$REPO_URL" ]]; then
@@ -152,33 +154,33 @@ main() {
         mkdir -p "$HOME/apps"
         cd "$HOME/apps" || exit 1
         
-        if [[ -d "$SAFE_MODULE_NAME/.git" ]]; then
-            print_warning "Directory $SAFE_MODULE_NAME already exists. Pulling latest changes..."
-            cd "$SAFE_MODULE_NAME"
+        if [[ -d "module/.git" ]]; then
+            print_warning "Directory module already exists. Pulling latest changes..."
+            cd "module"
             git pull origin main || git pull origin master || {
                 print_warning "git pull failed; recloning repository..."
                 cd "$HOME/apps"
-                rm -rf "$SAFE_MODULE_NAME"
-                git clone "$REPO_URL" "$SAFE_MODULE_NAME"
+                rm -rf "module"
+                git clone "$REPO_URL" "module"
             }
             cd ..
         else
-            git clone "$REPO_URL" "$SAFE_MODULE_NAME"
+            git clone "$REPO_URL" "module"
         fi
         
-        print_success "Repository cloned to $HOME/apps/$SAFE_MODULE_NAME"
+        print_success "Repository cloned to $MODULE_DIR"
     else
         print_status "📁 Creating module directory..."
-        mkdir -p "$HOME/apps/$SAFE_MODULE_NAME"
-        print_success "Module directory created: $HOME/apps/$SAFE_MODULE_NAME"
+        mkdir -p "$MODULE_DIR"
+        print_success "Module directory created: $MODULE_DIR"
     fi
     
     # Step 2: Check for existing docker-compose.yml in module
-    MODULE_COMPOSE_FILE="$HOME/apps/$SAFE_MODULE_NAME/docker-compose.yml"
+    MODULE_COMPOSE_FILE="$MODULE_DIR/docker-compose.yml"
     if [[ -f "$MODULE_COMPOSE_FILE" ]]; then
         print_status "🐳 Found existing docker-compose.yml in module"
         print_warning "Please ensure your docker-compose.yml exposes port $APP_PORT"
-        print_warning "You can start your module with: cd $HOME/apps/$SAFE_MODULE_NAME && docker-compose up -d"
+        print_warning "You can start your module with: cd $MODULE_DIR && docker-compose up -d"
     else
         print_warning "No docker-compose.yml found in module directory"
         print_warning "Please create one that exposes port $APP_PORT"
@@ -279,7 +281,7 @@ EOF
     
     # Step 4: Create a simple start script for the module
     print_status "📝 Creating module management script..."
-    MODULE_SCRIPT="$HOME/apps/$SAFE_MODULE_NAME/manage.sh"
+    MODULE_SCRIPT="$MODULE_DIR/manage.sh"
     
     cat > "$MODULE_SCRIPT" << EOF
 #!/bin/bash
@@ -408,7 +410,7 @@ EOF
     
     # Step 5: Create a README for the module
     print_status "📖 Creating module README..."
-    MODULE_README="$HOME/apps/$SAFE_MODULE_NAME/README.md"
+    MODULE_README="$MODULE_DIR/README.md"
     
     cat > "$MODULE_README" << EOF
 # $MODULE_NAME
@@ -476,19 +478,19 @@ EOF
     echo "Module Path: $MODULE_PATH"
     echo "App Port: $APP_PORT"
     echo "Health Check: $HEALTH_PATH"
-    echo "Module Directory: $HOME/apps/$SAFE_MODULE_NAME"
+    echo "Module Directory: $MODULE_DIR"
     echo
     print_status "Next steps:"
-    echo "1. Navigate to module directory: cd $HOME/apps/$SAFE_MODULE_NAME"
+    echo "1. Navigate to module directory: cd $MODULE_DIR"
     echo "2. Create or update your docker-compose.yml to expose port $APP_PORT"
     echo "3. Start your module: ./manage.sh start"
     echo "4. Test your app: https://168cap.com$MODULE_PATH"
     echo
     print_status "Useful commands:"
-    echo "- Start module: cd $HOME/apps/$SAFE_MODULE_NAME && ./manage.sh start"
-    echo "- View logs: cd $HOME/apps/$SAFE_MODULE_NAME && ./manage.sh logs"
-    echo "- Check status: cd $HOME/apps/$SAFE_MODULE_NAME && ./manage.sh status"
-    echo "- Update module: cd $HOME/apps/$SAFE_MODULE_NAME && ./manage.sh update"
+    echo "- Start module: cd $MODULE_DIR && ./manage.sh start"
+    echo "- View logs: cd $MODULE_DIR && ./manage.sh logs"
+    echo "- Check status: cd $MODULE_DIR && ./manage.sh status"
+    echo "- Update module: cd $MODULE_DIR && ./manage.sh update"
     echo
     
     if [[ ! -f "$MODULE_COMPOSE_FILE" ]]; then
