@@ -498,7 +498,9 @@ docker-compose logs -f db
 
 ## Adding New Apps
 
-Deploy new apps using the comprehensive setup script:
+### Option 1: Full App Setup (Recommended for new projects)
+
+Deploy new apps using the comprehensive setup script that manages everything in the main docker-compose:
 
 ```bash
 # Deploy any GitHub repo as a new app (uses path-based routing)
@@ -521,6 +523,44 @@ chmod +x ~/168cap-infra/scripts/add-new-app.sh
 - ✅ Updates deployment scripts
 
 **Time: ~3-5 minutes total** ⚡
+
+### Option 2: Module App Setup (For projects with their own docker-compose)
+
+For projects that have their own docker-compose files and you want to manage them independently:
+
+```bash
+# Add a module app that manages its own docker-compose
+su yonggangx
+cd ~
+chmod +x ~/168cap-infra/scripts/add-module-app.sh
+./168cap-infra/scripts/add-module-app.sh
+```
+
+**What it does:**
+- ✅ Sets up NGINX routing for your module at `/apps/module-name`
+- ✅ Creates a management script (`manage.sh`) in your module directory
+- ✅ Optional repository cloning
+- ✅ Creates documentation and README
+- ✅ You maintain full control over your docker-compose configuration
+
+**Module Management Commands:**
+```bash
+cd ~/apps/your-module
+./manage.sh start    # Start the module
+./manage.sh stop     # Stop the module
+./manage.sh restart  # Restart the module
+./manage.sh logs     # View logs
+./manage.sh status   # Check status
+./manage.sh build    # Build the module
+./manage.sh update   # Update code and restart
+./manage.sh health   # Check health status
+```
+
+**Perfect for:**
+- Projects with complex docker-compose configurations
+- Apps that need their own volumes, networks, or services
+- Independent development and deployment cycles
+- Teams working on separate modules
 
 ### Requirements for Your App Repository
 
