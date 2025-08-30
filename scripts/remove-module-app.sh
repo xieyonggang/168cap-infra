@@ -154,26 +154,15 @@ main() {
     sudo cp "$MAIN_NGINX_CONFIG" "${MAIN_NGINX_CONFIG}.backup.$(date +%Y%m%d_%H%M%S)"
     print_success "NGINX config backed up"
     
-    # Remove the module location blocks
-    # Find the line numbers for the module configuration
-    local start_line=$(grep -n "# Module: $MODULE_NAME" "$MAIN_NGINX_CONFIG" | cut -d: -f1)
+    # Remove the module location blocks using pattern-based removal
+    # This is more reliable than trying to calculate line numbers
+    print_status "Removing module configuration from NGINX..."
     
-    if [[ -n "$start_line" ]]; then
-        # Find the end of the module configuration (next closing brace)
-        local end_line=$(tail -n +$((start_line + 1)) "$MAIN_NGINX_CONFIG" | grep -n "^}" | head -1 | cut -d: -f1)
-        end_line=$((start_line + end_line))
-        
-        # Remove the lines
-        sudo sed -i "${start_line},${end_line}d" "$MAIN_NGINX_CONFIG"
-        print_success "Removed module configuration from NGINX"
-    else
-        print_warning "Could not find exact module configuration, attempting pattern-based removal"
-        
-        # Fallback: remove lines containing the module path
-        sudo sed -i "/location = \/apps\/$MODULE_NAME/d" "$MAIN_NGINX_CONFIG"
-        sudo sed -i "/location \/apps\/$MODULE_NAME\//,/^}/d" "$MAIN_NGINX_CONFIG"
-        print_success "Removed module configuration using pattern matching"
-    fi
+    # Remove the redirect location and the main location block
+    sudo sed -i "/location = \/apps\/$MODULE_NAME/d" "$MAIN_NGINX_CONFIG"
+    sudo sed -i "/# Module: $MODULE_NAME/,/^}/d" "$MAIN_NGINX_CONFIG"
+    
+    print_success "Removed module configuration from NGINX"
     
     # Test NGINX configuration
     print_status "Testing NGINX configuration..."
